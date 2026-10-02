@@ -304,15 +304,25 @@ jobs:
           popd
           mkdir ./out
           $n = if ($env:ONEDUXDESK_RELEASE) { $env:ONEDUXDESK_RELEASE } else { "dev.${{ github.run_number }}" }
-          mv $msi.FullName "./out/$env:APP_NAME-$env:VERSION-oneduxdesk.$n-x86_64.msi"
-          Get-FileHash ./out/*.msi -Algorithm SHA256 | Format-List
+          $name = "$env:APP_NAME-$env:VERSION-oneduxdesk.$n-x86_64.msi"
+          mv $msi.FullName "./out/$name"
+          # <name>.sha256 travels with the MSI: the console release step re-hashes the file it
+          # downloaded and compares (make release-rdh-client in console/ansible).
+          $hash = (Get-FileHash "./out/$name" -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path "./out/$name.sha256" -Value "$hash  $name" -NoNewline -Encoding ascii
+          Get-Content "./out/$name.sha256"
 
+      # Release runs: the artifact is named after the release tag and kept 90 days, so the console
+      # release step can find it by name (`make release-rdh-client n=N`). Dev runs: as before.
+      # (`env.RELEASE_TAG && …`, not `!= ''`: unset is null, and null != '' is true.)
       - name: Upload msi
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: oneduxdesk-windows-x86_64-msi
-          path: ./out/*.msi
-          retention-days: 14
+          name: ${{ env.RELEASE_TAG && format('oneduxdesk-msi-{0}', env.RELEASE_TAG) || 'oneduxdesk-windows-x86_64-msi' }}
+          path: |
+            ./out/*.msi
+            ./out/*.msi.sha256
+          retention-days: ${{ env.RELEASE_TAG && 90 || 14 }}
 
       - name: Upload unpacked folder
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
