@@ -2358,6 +2358,13 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    // OneDux Desk: never fall back to the public rustdesk.com servers when no server is
+    // configured. PROD_RENDEZVOUS_SERVER sits after custom-rendezvous-server in
+    // Config::get_rendezvous_server(s), so an imported config still wins; `.invalid` never
+    // resolves (RFC 6761), so an unconfigured client stays offline instead of registering
+    // with rs-*.rustdesk.com.
+    *config::PROD_RENDEZVOUS_SERVER.write().unwrap() =
+        "unconfigured.oneduxdesk.invalid".to_owned();
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
@@ -2460,7 +2467,8 @@ pub fn read_custom_client(config: &str) {
         log::error!("Failed to decode custom client config");
         return;
     };
-    const KEY: &str = "5Qbwsde3unUcJBtrx9ZkvUmwFNoExHzpryHuPUdqlWM=";
+    // OneDux Desk: custom.txt is signed with OneDux's key, not RustDesk's (see res/oneduxdesk/).
+    const KEY: &str = "Q1vOdwI6zUu4M4GAD+StGve3pDXMpLXj9LYZWn4msVQ=";
     let Some(pk) = get_rs_pk(KEY) else {
         log::error!("Failed to parse public key of custom client");
         return;

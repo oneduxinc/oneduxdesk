@@ -1,0 +1,12 @@
+{
+  "app-name": "OneDuxDesk",
+  "default-settings": {
+    "api-server": "https://console.onedux.com/api/rdh/client",
+    "allow-deep-link-server-settings": "Y"
+  },
+  "override-settings": {
+    "enable-webrtc": "N",
+    "enable-check-update": "N",
+    "allow-auto-update": "N"
+  }
+}
