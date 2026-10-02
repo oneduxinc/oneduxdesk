@@ -269,6 +269,11 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut webrtc_suspect_since: Option<Instant> = None;
                 let mut last_rx_progress = peer.rx_progress();
                 let mut peer_gone = false;
+                // OneDux Desk telemetry: session_end on leaving the loop (src/oneduxdesk_telemetry.rs).
+                let oneduxdesk_session =
+                    crate::oneduxdesk_telemetry::session_started(&self.handler.get_id());
+                let mut oneduxdesk_rx: u64 = 0;
+                let mut oneduxdesk_end = "network";
 
                 loop {
                     tokio::select! {
@@ -286,7 +291,9 @@ impl<T: InvokeUiSession> Remote<T> {
                                             self.handler.update_received(true);
                                         }
                                         self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
+                                        oneduxdesk_rx += bytes.len() as u64;
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
+                                            oneduxdesk_end = "peer";
                                             break
                                         }
                                     }
@@ -299,12 +306,14 @@ impl<T: InvokeUiSession> Remote<T> {
                                     log::info!("Reset by the peer");
                                     self.handler.msgbox("error", "Connection Error", "Reset by the peer", "");
                                 }
+                                oneduxdesk_end = "peer";
                                 break;
                             }
                         }
                         d = self.receiver.recv() => {
                             if let Some(d) = d {
                                 if !self.handle_msg_from_ui(d, &mut peer).await {
+                                    oneduxdesk_end = "user";
                                     break;
                                 }
                             }
@@ -406,6 +415,11 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 log::debug!("Exit io_loop of id={}", self.handler.get_id());
+                crate::oneduxdesk_telemetry::session_end(
+                    oneduxdesk_session,
+                    oneduxdesk_rx,
+                    oneduxdesk_end,
+                );
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
                     s.send(()).ok();

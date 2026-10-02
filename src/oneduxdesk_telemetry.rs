@@ -1,8 +1,10 @@
 //! OneDux Desk: connection telemetry for the hosted-server beta.
 //!
 //! What is sent: connection metadata only - how a connection was made (direct / relay), whether it
-//! worked and how long it took, the latency to the rendezvous server, the coarse NAT type, whether a
-//! public IPv6 address exists, and rendezvous reconnects - plus client version / OS / architecture
+//! worked and how long it took, how long the session lasted and how many bytes it received, the
+//! latency to the rendezvous server, the coarse NAT type, whether a public IPv6 address exists,
+//! rendezvous reconnects and the kind of network (wifi / cellular / wired) before and after a
+//! change - plus client version / OS / architecture
 //! and this device's and the peer's RustDesk ID (replaced by an HMAC on the server, never stored).
 //! Never sent: session content, input, clipboard, files, or the public IP address (the server infers
 //! ISP / region from the source address and drops it).
@@ -51,6 +53,8 @@ const MAX_AGE_SECS: i64 = 7 * 24 * 3600;
 /// The rendezvous latency is measured on every register (~every 12 s); one sample per 5 minutes is
 /// plenty for the line-quality question and keeps the queue small.
 const LATENCY_EVERY: Duration = Duration::from_secs(300);
+/// How often the default interface is looked at for network_change.
+const NETWORK_CHECK_EVERY: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy)]
 enum Queue {
@@ -74,6 +78,11 @@ lazy_static::lazy_static! {
     static ref FILE_LOCK: Mutex<()> = Mutex::new(());
     static ref RELAY_UUID: Mutex<HashMap<String, String>> = Default::default();
     static ref LAST_LATENCY: Mutex<Option<Instant>> = Default::default();
+    /// peer id -> session uuid of the last successful connect_result, taken by session_started.
+    static ref SESSION_UUID: Mutex<HashMap<String, String>> = Default::default();
+    /// (last check, (interface kind, IPv4 address)) of the default interface. The address only
+    /// tells whether the network changed; it is never sent.
+    static ref NETWORK: Mutex<(Option<Instant>, Option<(&'static str, String)>)> = Default::default();
 }
 static SENDER_STARTED: [AtomicBool; 2] = [AtomicBool::new(false), AtomicBool::new(false)];
 static PENDING: AtomicUsize = AtomicUsize::new(0);
@@ -88,9 +97,10 @@ fn enabled() -> bool {
 /// A latency sample to the rendezvous server, in milliseconds. The first one of the process also
 /// records `app_start`: by then the NAT test and the IPv6 probe have usually finished.
 pub fn hbbs_latency(latency_ms: i64) {
-    if latency_ms <= 0 {
+    if latency_ms <= 0 || !enabled() {
         return;
     }
+    check_network();
     if !APP_START_SENT.swap(true, Ordering::SeqCst) {
         let nat = match Config::get_nat_type() {
             n @ 0..=2 => n,
@@ -115,6 +125,92 @@ pub fn hbbs_latency(latency_ms: i64) {
     record(
         Queue::Server,
         json!({"type": "hbbs_latency", "latency_ms": latency_ms}),
+    );
+}
+
+/// Called from the rendezvous register loop, so it runs while the network is up: a switch made
+/// while offline shows up at the first register answer after it.
+fn check_network() {
+    let mut net = NETWORK.lock().unwrap();
+    if net.0.map(|t| t.elapsed() < NETWORK_CHECK_EVERY).unwrap_or(false) {
+        return;
+    }
+    net.0 = Some(Instant::now());
+    let Some(now) = default_network() else {
+        return;
+    };
+    if let Some(before) = net.1.as_ref() {
+        if *before != now {
+            record(
+                Queue::Server,
+                json!({"type": "network_change", "from": before.0, "to": now.0}),
+            );
+        }
+    }
+    net.1 = Some(now);
+}
+
+/// (kind, IPv4 address) of the default interface.
+#[cfg(not(target_os = "ios"))]
+fn default_network() -> Option<(&'static str, String)> {
+    use default_net::interface::InterfaceType as T;
+    let iface = default_net::get_default_interface().ok()?;
+    let kind = match iface.if_type {
+        T::Wireless80211 => "wifi",
+        T::Wwanpp | T::Wwanpp2 => "cellular",
+        T::Ethernet
+        | T::GigabitEthernet
+        | T::FastEthernetT
+        | T::FastEthernetFx
+        | T::Ethernet3Megabit => "wired",
+        _ => "unknown",
+    };
+    let addr = iface
+        .ipv4
+        .first()
+        .map(|n| n.addr.to_string())
+        .unwrap_or_default();
+    Some((kind, addr))
+}
+
+// default_net leaves undefined symbols on the iOS simulator (see src/lan.rs).
+#[cfg(target_os = "ios")]
+fn default_network() -> Option<(&'static str, String)> {
+    None
+}
+
+/// A controller session that connected; pass it back to session_end when it closes.
+pub struct Session {
+    uuid: String,
+    started: Instant,
+}
+
+/// Start of the session loop after a successful connection to `peer`. Its uuid is the one the
+/// connect_result for the same connection carried, so the two events can be joined.
+pub fn session_started(peer: &str) -> Session {
+    Session {
+        uuid: SESSION_UUID
+            .lock()
+            .unwrap()
+            .remove(peer)
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        started: Instant::now(),
+    }
+}
+
+/// The session loop ended. `reason`: user / peer / network / error. Only the received byte count
+/// is reported (sends are spread over too many call sites); both are the client's view and are
+/// only compared with the server-side metering, never billed.
+pub fn session_end(session: Session, bytes_rx: u64, reason: &str) {
+    record(
+        Queue::Client,
+        json!({
+            "type": "session_end",
+            "session_uuid": session.uuid,
+            "duration_s": session.started.elapsed().as_secs(),
+            "bytes_rx": bytes_rx,
+            "reason": reason,
+        }),
     );
 }
 
@@ -156,9 +252,14 @@ pub fn connect_result(peer: &str, outcome: Result<(&str, bool), &str>, elapsed: 
             ev["conn_type"] = json!(typ.chars().take(16).collect::<String>());
             ev["relay_used"] = json!(relayed);
             ev["punch_ok"] = json!(direct);
-            ev["session_uuid"] = json!(relay_uuid
+            let session_uuid = relay_uuid
                 .filter(|_| relayed)
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()));
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            SESSION_UUID
+                .lock()
+                .unwrap()
+                .insert(peer.to_owned(), session_uuid.clone());
+            ev["session_uuid"] = json!(session_uuid);
         }
         Err(err) => {
             ev["success"] = json!(false);
