@@ -12,6 +12,11 @@ name: OneDux Desk Windows
 
 on:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Release number N for version <upstream>-oneduxdesk.N; leave empty for a dev build"
+        required: false
+        default: ""
   push:
     branches:
       - oneduxdesk
@@ -39,6 +44,9 @@ env:
   MANUFACTURER: "OneDux"
   # Compiled into telemetry batches as client.build (src/oneduxdesk_telemetry.rs, option_env!).
   ONEDUXDESK_BUILD: ${{ github.sha }}
+  # Release number N (manual runs only); empty = dev build. Compiled into the telemetry version
+  # (<upstream>-oneduxdesk.N / .dev) and used in the MSI file name.
+  ONEDUXDESK_RELEASE: ${{ github.event.inputs.release }}
 
 jobs:
   # Inlined from bridge.yml, keeping only the Flutter 3.22.3 row that the x64 build uses (bridge.yml
@@ -242,6 +250,20 @@ jobs:
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
           mv -Force .\usbmmidd_v2 ./rustdesk
 
+      # Our unit tests (telemetry, IPv6 without STUN). Same profile, features and --lib as build.py's
+      # `cargo build`, so only this crate's test harness is compiled; upstream's own tests are not run
+      # here (some need the network).
+      - name: OneDux Desk unit tests
+        shell: bash
+        run: |
+          set -o pipefail
+          # A filter that matches nothing still "passes" (0 tests); fail instead, so a rename after
+          # a rebase cannot silently switch these tests off.
+          for f in oneduxdesk test_ipv6; do
+            cargo test --locked --features hwcodec,vram,flutter --lib --release -- "$f" 2>&1 | tee "test-$f.log"
+            grep -Eq "test result: ok\. [1-9][0-9]* passed" "test-$f.log" || { echo "::error::no test matched '$f'"; exit 1; }
+          done
+
       - name: OneDux Desk packaging (rename exe, add signed custom.txt)
         shell: bash
         run: |
@@ -261,7 +283,8 @@ jobs:
           $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
           popd
           mkdir ./out
-          mv $msi.FullName "./out/$env:APP_NAME-$env:VERSION-${{ github.run_number }}-x86_64.msi"
+          $n = if ($env:ONEDUXDESK_RELEASE) { $env:ONEDUXDESK_RELEASE } else { "dev.${{ github.run_number }}" }
+          mv $msi.FullName "./out/$env:APP_NAME-$env:VERSION-oneduxdesk.$n-x86_64.msi"
           Get-FileHash ./out/*.msi -Algorithm SHA256 | Format-List
 
       - name: Upload msi

@@ -592,7 +592,7 @@ fn batch_body(events: Vec<Value>) -> Option<String> {
             "id_server": id_server,
             "key_fp": key_fp,
             "client": {
-                "version": format!("{}-oneduxdesk", crate::VERSION).chars().take(32).collect::<String>(),
+                "version": client_version().chars().take(32).collect::<String>(),
                 "build": option_env!("ONEDUXDESK_BUILD").unwrap_or("dev"),
                 "os": std::env::consts::OS,
                 "os_version": os_version,
@@ -603,6 +603,15 @@ fn batch_body(events: Vec<Value>) -> Option<String> {
         })
         .to_string(),
     )
+}
+
+/// `<upstream version>-oneduxdesk.<N>`; N is the release number given to a manual CI run
+/// (ONEDUXDESK_RELEASE), "dev" for every other build.
+fn client_version() -> String {
+    let n = option_env!("ONEDUXDESK_RELEASE")
+        .filter(|n| !n.is_empty())
+        .unwrap_or("dev");
+    format!("{}-oneduxdesk.{}", crate::VERSION, n)
 }
 
 async fn post(body: String) -> ResultType<u16> {
@@ -648,6 +657,13 @@ mod tests {
         assert_eq!(error_class("deadline has elapsed"), "timeout");
         assert_eq!(error_class("Failed to connect to relay server"), "relay_failed");
         assert_eq!(error_class("something else entirely: 10.0.0.1"), "other");
+    }
+
+    #[test]
+    fn client_version_fits_the_console_limit() {
+        let v = client_version();
+        assert!(v.starts_with(&format!("{}-oneduxdesk.", crate::VERSION)));
+        assert!(v.len() <= 32, "{v} is longer than the console's 32 characters");
     }
 
     #[test]
