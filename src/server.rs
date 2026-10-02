@@ -226,12 +226,16 @@ pub async fn create_tcp_connection(
     };
     // Before the handshake, so its read is bounded too; lifted again at authorization.
     stream.set_max_packet_length(MAX_UNAUTHORIZED_MESSAGE);
+    // OneDux Desk telemetry: the controlled side's connect_result (dropped unfinished = failed).
+    let oneduxdesk_attempt =
+        crate::oneduxdesk_telemetry::ControlledAttempt::new(addr, stream.is_webrtc());
     tokio::select! {
         handshake = identity_handshake(&mut stream, secure) => handshake?,
         _ = unauthorized.evicted() => {
             bail!("evicted to make room for a newer unauthenticated connection");
         }
     }
+    oneduxdesk_attempt.established();
 
     #[cfg(target_os = "macos")]
     {
@@ -384,6 +388,7 @@ pub async fn create_relay_connection(
     )
     .await
     {
+        crate::oneduxdesk_telemetry::controlled_relay_failed(peer_addr, &err.to_string());
         log::error!(
             "Failed to create relay connection for {} with uuid {}: {}",
             peer_addr,
@@ -402,6 +407,7 @@ async fn create_relay_connection_(
     ipv4: bool,
     meta: ConnectionMeta,
 ) -> ResultType<()> {
+    crate::oneduxdesk_telemetry::controlled_relay_requested(peer_addr, &uuid);
     let mut stream = socket_client::connect_tcp(
         socket_client::ipv4_to_ipv6(crate::check_port(relay_server, RELAY_PORT), ipv4),
         CONNECT_TIMEOUT,

@@ -30,6 +30,7 @@ use std::{
     collections::HashMap,
     fs::{self, OpenOptions},
     io::Write,
+    net::SocketAddr,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -83,6 +84,8 @@ lazy_static::lazy_static! {
     /// (last check, (interface kind, IPv4 address)) of the default interface. The address only
     /// tells whether the network changed; it is never sent.
     static ref NETWORK: Mutex<(Option<Instant>, Option<(&'static str, String)>)> = Default::default();
+    /// Controlled side: controller address -> (relay uuid, when the relay was requested).
+    static ref CONTROLLED_RELAY: Mutex<HashMap<SocketAddr, (String, Instant)>> = Default::default();
 }
 static SENDER_STARTED: [AtomicBool; 2] = [AtomicBool::new(false), AtomicBool::new(false)];
 static PENDING: AtomicUsize = AtomicUsize::new(0);
@@ -269,6 +272,114 @@ pub fn connect_result(peer: &str, outcome: Result<(&str, bool), &str>, elapsed: 
         }
     }
     record(Queue::Client, ev);
+}
+
+// --- controlled side ----------------------------------------------------------------------------
+//
+// Every incoming connection - relayed, hole-punched or LAN - goes through
+// server::create_tcp_connection, which runs the identity handshake and then the whole session.
+// A ControlledAttempt spans the handshake: established() records success there, and dropping it
+// unfinished (an early return on a handshake error) records the failure, so the upstream
+// handshake code stays untouched. The controller's ID is not known yet at that point (it comes
+// with the login request), so `peer` is left out.
+
+/// The rendezvous server asked this device to meet `peer_addr` at a relay under `uuid`.
+pub fn controlled_relay_requested(peer_addr: SocketAddr, uuid: &str) {
+    CONTROLLED_RELAY.lock().unwrap().insert(
+        hbb_common::try_into_v4(peer_addr),
+        (uuid.to_owned(), Instant::now()),
+    );
+}
+
+/// The relay connection failed. Records the failure only if it happened before the handshake
+/// (otherwise the attempt has already been recorded and this is the session ending).
+pub fn controlled_relay_failed(peer_addr: SocketAddr, err: &str) {
+    let entry = CONTROLLED_RELAY
+        .lock()
+        .unwrap()
+        .remove(&hbb_common::try_into_v4(peer_addr));
+    if let Some((uuid, started)) = entry {
+        record(
+            Queue::Server,
+            json!({
+                "type": "connect_result",
+                "role": "controlled",
+                "session_uuid": uuid_or_new(Some(uuid)),
+                "conn_type": "Relay",
+                "relay_used": true,
+                "success": false,
+                "error": error_class(err),
+                "connect_ms": started.elapsed().as_millis() as u64,
+            }),
+        );
+    }
+}
+
+pub struct ControlledAttempt {
+    addr: SocketAddr,
+    webrtc: bool,
+    started: Instant,
+    done: bool,
+}
+
+impl ControlledAttempt {
+    /// `addr` as create_tcp_connection keys it (already try_into_v4).
+    pub fn new(addr: SocketAddr, webrtc: bool) -> Self {
+        Self {
+            addr,
+            webrtc,
+            started: Instant::now(),
+            done: false,
+        }
+    }
+
+    pub fn established(mut self) {
+        self.done = true;
+        self.finish(true);
+    }
+
+    fn finish(&self, success: bool) {
+        let relay = CONTROLLED_RELAY.lock().unwrap().remove(&self.addr);
+        let relayed = relay.is_some();
+        let (uuid, started) = match relay {
+            Some((uuid, started)) => (Some(uuid), started),
+            None => (None, self.started),
+        };
+        let conn_type = if relayed {
+            "Relay"
+        } else if self.webrtc {
+            "WebRTC"
+        } else {
+            "Direct"
+        };
+        let mut ev = json!({
+            "type": "connect_result",
+            "role": "controlled",
+            "session_uuid": uuid_or_new(uuid),
+            "conn_type": conn_type,
+            "relay_used": relayed,
+            "punch_ok": !relayed,
+            "success": success,
+            "connect_ms": started.elapsed().as_millis() as u64,
+        });
+        if !success {
+            ev["error"] = json!("handshake");
+        }
+        record(Queue::Server, ev);
+    }
+}
+
+impl Drop for ControlledAttempt {
+    fn drop(&mut self) {
+        if !self.done {
+            self.finish(false);
+        }
+    }
+}
+
+fn uuid_or_new(uuid: Option<String>) -> String {
+    uuid.filter(|u| uuid::Uuid::parse_str(u).is_ok())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
 }
 
 fn error_class(err: &str) -> &'static str {
