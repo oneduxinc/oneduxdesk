@@ -169,6 +169,8 @@ const String kOptionEnableConfirmClosingTabs = "enable-confirm-closing-tabs";
 const String kOptionEnablePortForwardMux = "enable-port-forward-mux";
 const String kOptionAllowAlwaysSoftwareRender = "allow-always-software-render";
 const String kOptionEnableCheckUpdate = "enable-check-update";
+// OneDux Desk: connection telemetry switch (src/oneduxdesk_telemetry.rs), on by default.
+const String kOptionEnableOneDuxDeskTelemetry = "enable-oneduxdesk-telemetry";
 const String kOptionAllowAutoUpdate = "allow-auto-update";
 const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
 const String kOptionStopService = "stop-service";

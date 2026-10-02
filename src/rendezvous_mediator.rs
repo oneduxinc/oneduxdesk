@@ -391,6 +391,11 @@ impl RendezvousMediator {
         loop {
             let mut update_latency = || {
                 last_register_resp = Some(Instant::now());
+                // OneDux Desk telemetry: back after an outage (the same threshold that zeroes the
+                // displayed latency below).
+                if fails >= MAX_FAILS1 {
+                    crate::oneduxdesk_telemetry::hbbs_reconnect(fails);
+                }
                 fails = 0;
                 reg_timeout = MIN_REG_TIMEOUT;
                 let mut latency = last_register_sent
@@ -400,6 +405,8 @@ impl RendezvousMediator {
                 if latency < 0 || latency > 1_000_000 {
                     return;
                 }
+                // OneDux Desk telemetry: the raw sample, before the moving average.
+                crate::oneduxdesk_telemetry::hbbs_latency(latency / 1000);
                 if ema_latency == 0 {
                     ema_latency = latency;
                 } else {
@@ -619,6 +626,8 @@ impl RendezvousMediator {
                 let latency = last_register_sent
                     .map(|x| x.elapsed().as_micros() as i64)
                     .unwrap_or(0);
+                // OneDux Desk telemetry (TCP / WebSocket / proxy mode).
+                crate::oneduxdesk_telemetry::hbbs_latency(latency / 1000);
                 Config::update_latency(&host, latency);
                 log::debug!("Latency of {}: {}ms", host, latency as f64 / 1000.);
             };

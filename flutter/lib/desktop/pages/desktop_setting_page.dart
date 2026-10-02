@@ -558,6 +558,13 @@ class _GeneralState extends State<_General> {
           kOptionEnableCheckUpdate,
           isServer: false,
         ),
+      // OneDux Desk: connection diagnostics; a server option so the service process honours it too.
+      if (!isWeb)
+        _OptionCheckBox(
+          context,
+          'Send connection diagnostics',
+          kOptionEnableOneDuxDeskTelemetry,
+        ),
       if (showAutoUpdate)
         _OptionCheckBox(
           context,

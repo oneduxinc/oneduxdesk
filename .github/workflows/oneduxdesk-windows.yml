@@ -33,6 +33,8 @@ env:
   VERSION: "1.5.0"
   APP_NAME: "OneDuxDesk"
   MANUFACTURER: "OneDux"
+  # Compiled into telemetry batches as client.build (src/oneduxdesk_telemetry.rs, option_env!).
+  ONEDUXDESK_BUILD: ${{ github.sha }}
 
 jobs:
   generate-bridge:

@@ -378,7 +378,22 @@ impl Client {
         debug_assert!(peer == interface.get_id());
         interface.update_direct(None);
         interface.update_received(false);
-        match Self::_start(peer, key, token, conn_type, interface.clone()).await {
+        let oneduxdesk_started = Instant::now();
+        let res = Self::_start(peer, key, token, conn_type, interface.clone()).await;
+        // OneDux Desk telemetry: one connect_result per attempt (src/oneduxdesk_telemetry.rs).
+        match &res {
+            Ok(x) => crate::oneduxdesk_telemetry::connect_result(
+                peer,
+                Ok((x.0 .4, x.0 .1)),
+                oneduxdesk_started.elapsed(),
+            ),
+            Err(err) => crate::oneduxdesk_telemetry::connect_result(
+                peer,
+                Err(&err.to_string()),
+                oneduxdesk_started.elapsed(),
+            ),
+        }
+        match res {
             Err(err) => {
                 let err_str = err.to_string();
                 if err_str.starts_with("Failed") {
@@ -1848,6 +1863,7 @@ impl Client {
         conn_type: ConnType,
         ipv4: bool,
     ) -> ResultType<Stream> {
+        crate::oneduxdesk_telemetry::note_relay_uuid(peer, &uuid);
         let mut conn = connect_tcp(
             ipv4_to_ipv6(check_port(relay_server, RELAY_PORT), ipv4),
             CONNECT_TIMEOUT,

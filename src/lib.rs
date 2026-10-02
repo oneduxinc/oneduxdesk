@@ -64,6 +64,9 @@ mod ui_session_interface;
 
 mod hbbs_http;
 
+// OneDux Desk: connection telemetry for the hosted-server beta.
+mod oneduxdesk_telemetry;
+
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub mod clipboard_file;
 

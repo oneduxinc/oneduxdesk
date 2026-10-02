@@ -2878,6 +2878,11 @@ pub async fn punch_udp(
     }
 }
 
+/// OneDux Desk telemetry: whether the local route probe found a public IPv6 address.
+pub fn oneduxdesk_has_public_ipv6() -> bool {
+    PUBLIC_IPV6_ADDR.lock().unwrap().0.is_some()
+}
+
 fn test_ipv6_sync() {
     #[tokio::main(flavor = "current_thread")]
     async fn func() {
