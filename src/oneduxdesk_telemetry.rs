@@ -606,8 +606,10 @@ fn batch_body(events: Vec<Value>) -> Option<String> {
 }
 
 /// `<upstream version>-oneduxdesk.<N>`; N is the release number given to a manual CI run
-/// (ONEDUXDESK_RELEASE), "dev" for every other build.
-fn client_version() -> String {
+/// (ONEDUXDESK_RELEASE), "dev" for every other build. Also what the About page shows
+/// (ui_interface::get_version), so the two never disagree. Display only: protocol, registration and
+/// version comparisons keep using crate::VERSION.
+pub fn client_version() -> String {
     let n = option_env!("ONEDUXDESK_RELEASE")
         .filter(|n| !n.is_empty())
         .unwrap_or("dev");

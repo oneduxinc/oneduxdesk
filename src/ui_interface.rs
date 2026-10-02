@@ -757,9 +757,11 @@ pub fn get_new_version() -> String {
     .to_string()
 }
 
+/// Display only (About page). OneDux Desk: shows `<upstream>-oneduxdesk.<N>`; anything that
+/// compares or sends versions uses crate::VERSION, which stays the upstream number.
 #[inline]
 pub fn get_version() -> String {
-    crate::VERSION.to_owned()
+    crate::oneduxdesk_telemetry::client_version()
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
