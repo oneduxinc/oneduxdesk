@@ -2,6 +2,9 @@ lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
         ("desk_tip", "Your desktop can be accessed with this ID and password."),
+        ("oneduxdesk-telemetry-notice-collect", "OneDux Desk sends connection diagnostics to OneDux to evaluate the beta service: how each connection was made (direct or relayed), whether it worked and how long it took, the latency to your server, the NAT type, and the client version and operating system. Device IDs are replaced by an irreversible hash on our server."),
+        ("oneduxdesk-telemetry-notice-never", "Never collected: screen content, keyboard and mouse input, clipboard, files, chat, passwords, or your IP address (the server keeps only the inferred ISP and region)."),
+        ("oneduxdesk-telemetry-notice-off", "You can turn this off at any time in Settings > General > Send connection diagnostics. Everything keeps working when it is off."),
         ("connecting_status", "Connecting to the RustDesk network..."),
         ("not_ready_status", "Not ready. Please check your connection"),
         ("ID/Relay Server", "ID/Relay server"),

@@ -3,6 +3,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
         ("Status", "状态"),
         ("Send connection diagnostics", "发送连接诊断数据"),
+        ("Connection diagnostics", "连接诊断数据"),
+        ("Turn off", "关闭"),
+        ("oneduxdesk-telemetry-notice-collect", "OneDux Desk 会向 OneDux 发送连接诊断数据，用于评估公测服务：每次连接的方式（直连或中继）、是否成功与耗时、到服务器的延迟、NAT 类型，以及客户端版本与操作系统。设备 ID 在我们的服务器上换成不可逆摘要。"),
+        ("oneduxdesk-telemetry-notice-never", "不收集：屏幕画面、键盘鼠标输入、剪贴板、文件、聊天内容、密码，以及你的 IP 地址（服务器只保留推断出的运营商与省份）。"),
+        ("oneduxdesk-telemetry-notice-off", "可随时在 设置 → 常规 →「发送连接诊断数据」关闭，关闭后所有功能照常可用。"),
         ("Your Desktop", "你的桌面"),
         ("desk_tip", "你的桌面可以通过下面的 ID 和密码访问。"),
         ("Password", "密码"),

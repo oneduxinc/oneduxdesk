@@ -842,6 +842,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       }
     });
     _uniLinksSubscription = listenUniLinks();
+    // OneDux Desk: one-time connection-diagnostics notice, after the first frame so the dialog
+    // has an overlay to attach to.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showOneDuxDeskTelemetryNoticeOnce();
+    });
 
     if (bind.isIncomingOnly()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -3607,6 +3607,50 @@ void confirmImportConfigFromLink(String text) {
   });
 }
 
+const String kOneDuxDeskTelemetryNoticeShown =
+    'oneduxdesk-telemetry-notice-shown';
+
+/// OneDux Desk: say once, on the first start of the main window, what the connection diagnostics
+/// (src/oneduxdesk_telemetry.rs) collect and how to switch them off. The beta terms say the same.
+void showOneDuxDeskTelemetryNoticeOnce() {
+  if (bind.mainGetLocalOption(key: kOneDuxDeskTelemetryNoticeShown) == 'Y') {
+    return;
+  }
+  gFFI.dialogManager.show((setState, close, context) {
+    done() async {
+      await bind.mainSetLocalOption(
+          key: kOneDuxDeskTelemetryNoticeShown, value: 'Y');
+      close();
+    }
+
+    turnOff() async {
+      await mainSetBoolOption(kOptionEnableOneDuxDeskTelemetry, false);
+      await done();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('Connection diagnostics')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(translate('oneduxdesk-telemetry-notice-collect')),
+          const SizedBox(height: 8),
+          Text(translate('oneduxdesk-telemetry-notice-never')),
+          const SizedBox(height: 8),
+          Text(translate('oneduxdesk-telemetry-notice-off')),
+        ],
+      ),
+      actions: [
+        dialogButton('Turn off', onPressed: turnOff, isOutline: true),
+        dialogButton('OK', onPressed: done),
+      ],
+      onSubmit: done,
+      onCancel: done,
+    );
+  });
+}
+
 importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,
     String? text) {
   text = text?.trim();
