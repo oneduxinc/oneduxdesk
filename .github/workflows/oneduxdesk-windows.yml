@@ -28,7 +28,11 @@ env:
   SCITER_RUST_VERSION: "1.75"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # vcpkg removed its 'x-gha' binary cache backend (the build log says so and ignores it), so every
+  # run rebuilt ffmpeg / libvpx / aom from source. Built packages now go to a plain directory that
+  # actions/cache keeps; it is saved right after `vcpkg install`, so a run that later fails in the
+  # Rust / Flutter build still leaves the next run a warm cache.
+  VCPKG_BINARY_SOURCES: "clear;files,C:/vcpkg-bincache,readwrite"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
   VERSION: "1.5.0"
   APP_NAME: "OneDuxDesk"
@@ -109,12 +113,24 @@ jobs:
         with:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
-          doNotCache: false
+          # Its own cache of the vcpkg tool uses the retired cache service (400 on restore, 503 on
+          # save); bootstrapping the tool takes about a minute anyway.
+          doNotCache: true
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-bincache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: C:/vcpkg-bincache
+          key: vcpkg-bin-x64-windows-static-${{ env.VCPKG_COMMIT_ID }}-${{ hashFiles('vcpkg.json', 'res/vcpkg/**') }}
+          restore-keys: |
+            vcpkg-bin-x64-windows-static-${{ env.VCPKG_COMMIT_ID }}-
 
       - name: Install vcpkg dependencies
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
         run: |
+          mkdir -p /c/vcpkg-bincache
           if ! $VCPKG_ROOT/vcpkg \
             install \
             --triplet x64-windows-static \
@@ -129,6 +145,13 @@ jobs:
             exit 1
           fi
         shell: bash
+
+      - name: Save vcpkg binary cache
+        if: steps.vcpkg-bincache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: C:/vcpkg-bincache
+          key: ${{ steps.vcpkg-bincache.outputs.cache-primary-key }}
 
       - name: Build rustdesk
         run: |
