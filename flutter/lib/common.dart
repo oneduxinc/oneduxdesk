@@ -2428,6 +2428,20 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
       Timer(Duration(seconds: 1), () {
         importConfig(null, null, config);
       });
+    } else if (isDesktop) {
+      // OneDux Desk: desktop accepts <scheme>://config/<config string> too (the console's
+      // "Open in OneDux Desk" button), behind the same built-in option as mobile and only after
+      // the user confirms the target server in confirmImportConfigFromLink.
+      if (bind.mainGetBuildinOption(key: kOptionAllowDeepLinkServerSettings) !=
+          'Y') {
+        debugPrint(
+            "Ignore config link because $kOptionAllowDeepLinkServerSettings is not enabled.");
+        return null;
+      }
+      final config = uri.path.substring("/".length);
+      Timer(Duration(seconds: 1), () {
+        confirmImportConfigFromLink(config);
+      });
     }
     return null;
   } else if (uri.authority == "password") {
@@ -3546,6 +3560,51 @@ class _CountDownButtonState extends State<_CountDownButton> {
       isOutline: true,
     );
   }
+}
+
+/// OneDux Desk: a config link changes which server this device registers with, so a link that
+/// imported silently would hand the device to whoever wrote the link. Show the target server and
+/// import only on the user's OK.
+void confirmImportConfigFromLink(String text) {
+  final ServerConfig sc;
+  try {
+    sc = ServerConfig.decode(text.trim());
+  } catch (_) {
+    showToast(translate('Invalid server configuration'));
+    return;
+  }
+  if (sc.idServer.isEmpty) {
+    showToast(translate('Invalid server configuration'));
+    return;
+  }
+  windowOnTop(null);
+  gFFI.dialogManager.show((setState, close, context) {
+    submit() {
+      close();
+      importConfig(null, null, text);
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate('Import server config')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText('${translate('ID Server')}: ${sc.idServer}'),
+          if (sc.relayServer.isNotEmpty)
+            SelectableText('${translate('Relay Server')}: ${sc.relayServer}'),
+          if (sc.apiServer.isNotEmpty)
+            SelectableText('${translate('API Server')}: ${sc.apiServer}'),
+        ],
+      ),
+      actions: [
+        dialogButton('Cancel', onPressed: close, isOutline: true),
+        dialogButton('OK', onPressed: submit),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
 }
 
 importConfig(List<TextEditingController>? controllers, List<RxString>? errMsgs,

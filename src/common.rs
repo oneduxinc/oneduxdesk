@@ -2644,6 +2644,9 @@ const IPV6_ROUTE_PROBE: std::net::Ipv6Addr =
 /// longer than this: a probe that outlived the minute could write an earlier network's address
 /// over a later probe's.
 const STUN_IPV6_TIMEOUT_MS: u64 = 5_000;
+/// OneDux Desk: see test_ipv6(). A constant rather than deleting upstream's STUN block keeps the
+/// diff to a few lines, so rebasing onto upstream does not conflict on that code.
+const ONEDUXDESK_LOCAL_IPV6_ONLY: bool = true;
 
 async fn test_bind_ipv6() -> ResultType<SocketAddr> {
     let local_addr = SocketAddr::from(([0u16; 8], 0)); // [::]:0
@@ -2720,6 +2723,15 @@ pub async fn test_ipv6() -> Option<tokio::task::JoinHandle<()>> {
         }
     });
     */
+
+    // OneDux Desk: the public IPv6 address comes from the local route probe above only. Upstream
+    // goes on to ask third-party STUN servers (Google / Cloudflare / antisip / Nextcloud) in the
+    // background, which tells them this device's address and when it is in use; that probe is
+    // not used. Where the local address is not globally routable (NPTv6 and the like) IPv6
+    // punching is simply not offered and the connection falls back to IPv4 / relay as before.
+    if ONEDUXDESK_LOCAL_IPV6_ONLY {
+        return None;
+    }
 
     Some(tokio::spawn(async {
         use hbb_common::futures::future::{select_ok, FutureExt};
@@ -3817,5 +3829,13 @@ mod tests {
     #[tokio::test]
     async fn test_ipv6_route_probe_does_not_wait_on_the_network() {
         assert!(hbb_common::timeout(1_000, test_bind_ipv6()).await.is_ok());
+    }
+
+    // OneDux Desk: with the minute's cache cleared, upstream would hand back the background STUN
+    // job here; ours must not start one.
+    #[tokio::test]
+    async fn test_ipv6_does_not_ask_stun_servers() {
+        PUBLIC_IPV6_ADDR.lock().unwrap().1 = None;
+        assert!(test_ipv6().await.is_none());
     }
 }
