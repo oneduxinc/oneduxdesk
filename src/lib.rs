@@ -66,6 +66,8 @@ mod hbbs_http;
 
 // OneDux Desk: connection telemetry for the hosted-server beta.
 mod oneduxdesk_telemetry;
+// OneDux Desk: new-version notice from the OneDux console (replaces the upstream update check).
+mod oneduxdesk_update;
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub mod clipboard_file;

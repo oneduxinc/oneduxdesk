@@ -2394,6 +2394,12 @@ pub fn main_get_new_version() -> SyncReturn<String> {
     SyncReturn(get_new_version())
 }
 
+/// OneDux Desk: `{"version": …, "page": …}` when a newer OneDux Desk release exists, else "".
+/// The first call starts the background check (src/oneduxdesk_update.rs).
+pub fn main_oneduxdesk_newer_version() -> SyncReturn<String> {
+    SyncReturn(crate::oneduxdesk_update::newer_version_json())
+}
+
 pub fn main_update_me() -> SyncReturn<bool> {
     update_me("".to_owned());
     SyncReturn(true)

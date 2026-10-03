@@ -1576,6 +1576,11 @@ class RustdeskImpl {
     throw UnimplementedError("mainGetNewVersion");
   }
 
+  // OneDux Desk: the web client has no update notice.
+  String mainOneduxdeskNewerVersion({dynamic hint}) {
+    return '';
+  }
+
   bool mainUpdateMe({dynamic hint}) {
     throw UnimplementedError("mainUpdateMe");
   }

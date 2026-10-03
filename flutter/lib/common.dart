@@ -3607,6 +3607,37 @@ void confirmImportConfigFromLink(String text) {
   });
 }
 
+/// OneDux Desk: new-version notice (src/oneduxdesk_update.rs). The first poll starts the client's
+/// background check (at start-up, then daily); the main window polls the cached answer and shows a
+/// card that opens the console's download page in the browser.
+final oneduxdeskNewVersion = ''.obs;
+String oneduxdeskUpdatePage = '';
+Timer? _oneduxdeskUpdateTimer;
+
+void oneduxdeskWatchUpdate() {
+  if (isWeb || _oneduxdeskUpdateTimer != null) {
+    return;
+  }
+  void poll() {
+    final s = bind.mainOneduxdeskNewerVersion();
+    if (s.isEmpty) {
+      return;
+    }
+    try {
+      final m = jsonDecode(s) as Map<String, dynamic>;
+      oneduxdeskUpdatePage = m['page'] as String;
+      oneduxdeskNewVersion.value = m['version'] as String;
+    } catch (e) {
+      debugPrint('oneduxdesk update notice: $e');
+    }
+  }
+
+  poll(); // starts the background check
+  Timer(const Duration(seconds: 30), poll);
+  _oneduxdeskUpdateTimer =
+      Timer.periodic(const Duration(hours: 1), (_) => poll());
+}
+
 const String kOneDuxDeskTelemetryNoticeShown =
     'oneduxdesk-telemetry-notice-shown';
 

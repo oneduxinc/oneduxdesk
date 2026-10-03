@@ -428,6 +428,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   Widget buildHelpCards(String updateUrl) {
+    // OneDux Desk: our own new-version notice (src/oneduxdesk_update.rs). Upstream's card below is
+    // for RustDesk builds only (custom clients never see it) and its Update button would install a
+    // RustDesk release, so it is not reused. Reading the Rx here makes the surrounding Obx rebuild.
+    final oneduxdeskVersion = oneduxdeskNewVersion.value;
+    if (oneduxdeskVersion.isNotEmpty && !isCardClosed) {
+      return buildInstallCard(
+          "Status",
+          "${translate("new-version-of-{${bind.mainGetAppNameSync()}}-tip")} ($oneduxdeskVersion).",
+          "Download", () async {
+        await launchUrl(Uri.parse(oneduxdeskUpdatePage));
+      }, closeButton: true);
+    }
     if (!bind.isCustomClient() &&
         updateUrl.isNotEmpty &&
         !isCardClosed &&
@@ -847,6 +859,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showOneDuxDeskTelemetryNoticeOnce();
     });
+    // OneDux Desk: new-version notice (card in buildHelpCards).
+    oneduxdeskWatchUpdate();
 
     if (bind.isIncomingOnly()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
