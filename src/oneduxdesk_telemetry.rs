@@ -33,7 +33,7 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering},
         Mutex,
     },
     time::{Duration, Instant},
@@ -217,12 +217,33 @@ pub fn session_end(session: Session, bytes_rx: u64, reason: &str) {
     );
 }
 
-/// The rendezvous server answered again after `attempt` consecutive register timeouts.
-pub fn hbbs_reconnect(attempt: i64) {
-    record(
-        Queue::Server,
-        json!({"type": "reconnect", "kind": "hbbs", "attempt": attempt.max(0)}),
-    );
+/// Rendezvous mediator runs that ended in an error since the server last answered. A local outage
+/// (link down, so DNS fails at once) ends each run before it can count register timeouts, and the
+/// next run starts again from zero; this count survives the restarts.
+static MEDIATOR_ERRORS: AtomicI64 = AtomicI64::new(0);
+
+/// A rendezvous mediator run ended in an error (rendezvous_mediator.rs restart loop).
+pub fn hbbs_mediator_failed() {
+    MEDIATOR_ERRORS.fetch_add(1, Ordering::SeqCst);
+}
+
+/// The rendezvous server answered a register. `timeouts` is the run's consecutive register
+/// timeouts when they reached the reconnect threshold, else 0.
+pub fn hbbs_answered(timeouts: i64) {
+    let restarts = MEDIATOR_ERRORS.swap(0, Ordering::SeqCst);
+    if let Some(attempt) = reconnect_attempt(timeouts, restarts) {
+        record(
+            Queue::Server,
+            json!({"type": "reconnect", "kind": "hbbs", "attempt": attempt}),
+        );
+    }
+}
+
+/// `attempt` = failed tries before the server answered again: register timeouts within the run
+/// plus mediator runs that failed outright. None when nothing failed.
+fn reconnect_attempt(timeouts: i64, restarts: i64) -> Option<i64> {
+    let attempt = timeouts.max(0) + restarts.max(0);
+    (attempt > 0).then_some(attempt)
 }
 
 /// Remember the relay session uuid for `peer`, so the connect_result of a relayed connection
@@ -664,6 +685,15 @@ async fn post(body: String) -> ResultType<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reconnect_counts_restarts_as_well_as_timeouts() {
+        assert_eq!(reconnect_attempt(0, 0), None);
+        // Link down: every run failed on DNS, none reached a register timeout.
+        assert_eq!(reconnect_attempt(0, 45), Some(45));
+        assert_eq!(reconnect_attempt(3, 0), Some(3));
+        assert_eq!(reconnect_attempt(2, 1), Some(3));
+    }
 
     #[test]
     fn error_classes_carry_no_free_text() {

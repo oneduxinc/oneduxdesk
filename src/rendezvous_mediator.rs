@@ -328,6 +328,8 @@ impl RendezvousMediator {
                                 *timeout.write().unwrap() = 3000;
                             }
                             log::error!("{err}");
+                            // OneDux Desk telemetry: counted until the server answers again.
+                            crate::oneduxdesk_telemetry::hbbs_mediator_failed();
                         }
                         // SHOULD_EXIT here is to ensure once one exits, the others also exit.
                         SHOULD_EXIT.store(true, Ordering::SeqCst);
@@ -391,11 +393,9 @@ impl RendezvousMediator {
         loop {
             let mut update_latency = || {
                 last_register_resp = Some(Instant::now());
-                // OneDux Desk telemetry: back after an outage (the same threshold that zeroes the
-                // displayed latency below).
-                if fails >= MAX_FAILS1 {
-                    crate::oneduxdesk_telemetry::hbbs_reconnect(fails);
-                }
+                // OneDux Desk telemetry: back after an outage — register timeouts from the same
+                // threshold that zeroes the displayed latency below, or failed mediator runs.
+                crate::oneduxdesk_telemetry::hbbs_answered(if fails >= MAX_FAILS1 { fails } else { 0 });
                 fails = 0;
                 reg_timeout = MIN_REG_TIMEOUT;
                 let mut latency = last_register_sent
@@ -623,6 +623,7 @@ impl RendezvousMediator {
         Config::set_host_key_confirmed(&rz.host_prefix, false);
         loop {
             let mut update_latency = || {
+                crate::oneduxdesk_telemetry::hbbs_answered(0);
                 let latency = last_register_sent
                     .map(|x| x.elapsed().as_micros() as i64)
                     .unwrap_or(0);
