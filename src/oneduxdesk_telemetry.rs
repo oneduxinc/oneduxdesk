@@ -489,6 +489,19 @@ fn drop_first(q: Queue, n: usize) {
 
 // --- sending ------------------------------------------------------------------------------------
 
+/// Called once the UI process is up: events another UI process queued and could not send before
+/// it exited (a session_end, say) would otherwise wait for this process's own next event — that is,
+/// until the next outgoing connection. Only the main UI process sends the client queue, so two
+/// processes never trim the same file.
+pub fn resume_client_queue() {
+    if !crate::common::is_main() || !enabled() {
+        return;
+    }
+    if fs::metadata(Queue::Client.path()).map(|m| m.len()).unwrap_or(0) > 0 {
+        start_sender(Queue::Client);
+    }
+}
+
 fn start_sender(q: Queue) {
     if SENDER_STARTED[q as usize].swap(true, Ordering::SeqCst) {
         return;

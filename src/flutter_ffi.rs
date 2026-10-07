@@ -51,6 +51,9 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     } else {
         crate::read_custom_client(custom_client_config);
     }
+    // OneDux Desk: send what an earlier UI process left in the client telemetry queue.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    crate::oneduxdesk_telemetry::resume_client_queue();
     #[cfg(target_os = "android")]
     {
         // flexi_logger can't work when android_logger initialized.
