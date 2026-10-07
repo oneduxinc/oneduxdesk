@@ -2357,7 +2357,22 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
     ThrottledInterval::new(i)
 }
 
+// OneDux Desk: the name we run under when custom.txt is missing or fails verification.
+// Falling back to upstream's "RustDesk" would share the official client's config / log
+// directories and IPC pipes (and talk to its service when it is installed next to us).
+const ONEDUXDESK_FALLBACK_APP_NAME: &str = "OneDuxDesk";
+
+// OneDux Desk: whether a custom.txt passed verification. `is_custom_client()` can no longer
+// tell, because the fallback name above is not "RustDesk" either.
+static CUSTOM_CLIENT_LOADED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+pub fn is_custom_client_loaded() -> bool {
+    CUSTOM_CLIENT_LOADED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 pub fn load_custom_client() {
+    *config::APP_NAME.write().unwrap() = ONEDUXDESK_FALLBACK_APP_NAME.to_owned();
     // OneDux Desk: never fall back to the public rustdesk.com servers when no server is
     // configured. PROD_RENDEZVOUS_SERVER sits after custom-rendezvous-server in
     // Config::get_rendezvous_server(s), so an imported config still wins; `.invalid` never
@@ -2483,6 +2498,7 @@ pub fn read_custom_client(config: &str) {
         log::error!("Failed to parse custom client config");
         return;
     };
+    CUSTOM_CLIENT_LOADED.store(true, std::sync::atomic::Ordering::SeqCst);
 
     if let Some(app_name) = data.remove("app-name") {
         if let Some(app_name) = app_name.as_str() {
@@ -2978,6 +2994,16 @@ mod tests {
         time::{interval, interval_at, sleep, Duration, Instant, Interval},
     };
     use std::collections::HashSet;
+
+    #[test]
+    fn test_unverified_custom_client_keeps_the_oneduxdesk_name() {
+        read_custom_client("bm90IGEgc2lnbmVkIGNvbmZpZw");
+        assert!(!is_custom_client_loaded());
+        // No custom.txt next to the test binary: the fallback name must not be RustDesk's.
+        load_custom_client();
+        assert_eq!(get_app_name(), ONEDUXDESK_FALLBACK_APP_NAME);
+        assert!(!is_rustdesk());
+    }
 
     #[test]
     fn a_cursor_content_id_fits_a_web_client_number() {

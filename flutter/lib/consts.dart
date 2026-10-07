@@ -171,6 +171,11 @@ const String kOptionAllowAlwaysSoftwareRender = "allow-always-software-render";
 const String kOptionEnableCheckUpdate = "enable-check-update";
 // OneDux Desk: connection telemetry switch (src/oneduxdesk_telemetry.rs), on by default.
 const String kOptionEnableOneDuxDeskTelemetry = "enable-oneduxdesk-telemetry";
+// OneDux Desk: About page links (upstream points at rustdesk.com).
+const String kOneDuxDeskWebsiteUrl = "https://console.onedux.com/rdh";
+// TODO(oneduxdesk): switch to the published beta terms page once it exists.
+const String kOneDuxDeskPrivacyUrl = "https://console.onedux.com/rdh";
+const String kOneDuxDeskSourceUrl = "https://github.com/oneduxinc/oneduxdesk";
 const String kOptionAllowAutoUpdate = "allow-auto-update";
 const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
 const String kOptionStopService = "stop-service";

@@ -2080,7 +2080,7 @@ pub fn prepare_custom_client_update() -> ResultType<bool> {
             allow_err!(fs::remove_file(&local_custom_file_path));
 
             // Check if loaded successfully
-            if is_custom_file_exists && !crate::common::is_custom_client() {
+            if is_custom_file_exists && !crate::common::is_custom_client_loaded() {
                 // The custom.txt file existed, but its contents are invalid.
                 log::error!("Failed to load custom client from custom.txt.");
                 drop(clear_staging_on_exit);
