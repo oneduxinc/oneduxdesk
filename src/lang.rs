@@ -254,6 +254,8 @@ pub fn translate_locale(name: String, locale: &str) -> String {
             if s.contains("RustDesk")
                 && !name.starts_with("upgrade_rustdesk_server_pro")
                 && name != "powered_by_me"
+                // OneDux Desk: our own texts name RustDesk on purpose (the upstream it modifies).
+                && !name.starts_with("oneduxdesk-")
             {
                 let app_name = crate::get_app_name();
                 if !app_name.contains("RustDesk") {
@@ -314,6 +316,16 @@ fn extract_placeholder(input: &str) -> (String, Option<String>) {
 }
 
 mod test {
+    #[test]
+    fn oneduxdesk_texts_keep_the_rustdesk_name() {
+        // The running name is OneDuxDesk (custom.txt, or the fallback in load_custom_client).
+        *hbb_common::config::APP_NAME.write().unwrap() = "OneDuxDesk".to_owned();
+        for locale in ["en", "zh-cn"] {
+            let s = super::translate_locale("oneduxdesk-modified-notice".to_owned(), locale);
+            assert!(s.contains("RustDesk"), "{locale}: {s}");
+        }
+    }
+
     #[test]
     fn test_extract_placeholders() {
         use super::extract_placeholder as f;

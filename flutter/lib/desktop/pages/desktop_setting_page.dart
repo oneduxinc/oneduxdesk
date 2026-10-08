@@ -2597,7 +2597,7 @@ class _AboutState extends State<_About> {
                         children: [
                           // OneDux Desk: keep the upstream notice, state our modification (AGPL-3.0).
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd. (RustDesk)\n${translate('oneduxdesk-modified-notice')}\n$license',
+                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd. (RustDesk)\n${translate('oneduxdesk-modified-notice')}${license.isEmpty ? '' : '\n$license'}',
                             style: const TextStyle(color: Colors.white),
                           ),
                         ],
